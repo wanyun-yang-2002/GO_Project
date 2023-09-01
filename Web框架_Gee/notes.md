@@ -177,8 +177,85 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 ``` 
 `Engine`实现的 *ServeHTTP* 方法的作用：解析请求的路径，查找路由映射表，如果查到就执行注册的处理方法。如果查不到，就返回 *404 NOT FOUND*
 # 上下文 Context
-- 将路由(router)独立出来，方便之后增强。
-- 设计上下文(Context)，封装 Request 和 Response ，提供对 JSON、HTML 等返回类型的支持。
+- 将`路由(router)`独立出来，方便之后增强。
+- 设计`上下文(Context)`，封装 Request 和 Response ，提供对 JSON、HTML 等返回类型的支持。
+## 设计Context
+### 必要性
+1. 对Web服务来说，无非是根据请求`*http.Request`，构造响应`http.ResponseWriter`。但是这两个对象提供的接口粒度太细，比如要构造一个完整的响应，需要考虑消息头(Header)和消息体(Body)，Header 包含了状态码(StatusCode)，消息类型(ContentType)等几乎每次请求都需要设置的信息，如果不进行有效的封装，那么框架的用户将需要写大量重复，繁杂的代码，而且容易出错
+2. 针对使用场景，封装`*http.Request`和`http.ResponseWriter`的方法，简化相关接口的调用，只是设计 Context 的原因之一。对于框架来说，还需要支撑额外的功能。例如，将来解析动态路由`/hello/:name`，参数`:name`的值放在哪呢？再比如，框架需要支持中间件，那中间件产生的信息放在哪呢？Context 随着每一个请求的出现而产生，请求的结束而销毁，和当前请求强相关的信息都应由 Context 承载。因此，设计 Context 结构，扩展性和复杂性留在了内部，而对外简化了接口。路由的处理函数，以及将要实现的中间件，参数都统一使用 Context 实例， Context 就像一次会话的百宝箱，可以找到任何东西。
+## 具体实现
+### context.go
+```go
+type H map[string]interface{}
+``` 
+给`map[string]interface{}`起了一个别名`gee.H`，构建JSON数据时显得更简洁
+```go
+type Context struct {
+	// origin objects
+	Writer http.ResponseWriter
+	Req    *http.Request
+	// request info
+	Path   string
+	Method string
+	// response info
+	StatusCode int
+}
+
+func newContext(w http.ResponseWriter, req *http.Request) *Context {
+	return &Context{
+		Writer: w,
+		Req:    req,
+		Path:   req.URL.Path,
+		Method: req.Method,
+	}
+}
+``` 
+`Context`目前只包含了`http.ResponseWriter`和`*http.Request`，另外提供了对 Method 和 Path 这两个常用属性的直接访问。
+```go
+func (c *Context) PostForm(key string) string {
+	return c.Req.FormValue(key)
+}
+
+func (c *Context) Query(key string) string {
+	return c.Req.URL.Query().Get(key)
+}
+``` 
+提供了访问 Query 和 PostForm 参数的方法
+```go
+func (c *Context) String(code int, format string, values ...interface{}) {
+	c.SetHeader("Content-Type", "text/plain")
+	c.Status(code)
+	c.Writer.Write([]byte(fmt.Sprintf(format, values...)))
+}
+
+func (c *Context) JSON(code int, obj interface{}) {
+	c.SetHeader("Content-Type", "application/json")
+	c.Status(code)
+	encoder := json.NewEncoder(c.Writer)
+	if err := encoder.Encode(obj); err != nil {
+		http.Error(c.Writer, err.Error(), 500)
+	}
+}
+
+func (c *Context) Data(code int, data []byte) {
+	c.Status(code)
+	c.Writer.Write(data)
+}
+
+func (c *Context) HTML(code int, html string) {
+	c.SetHeader("Content-Type", "text/html")
+	c.Status(code)
+	c.Writer.Write([]byte(html))
+}
+``` 
+提供了快速构造 String/Data/JSON/HTML 响应的方法
+### 路由(Router)
+将和路由相关的方法和结构提取出来，放到一个新的文件`router.go`中，方便下一次对 router 的功能进行增强，例如提供动态路由的支持。 router 的 handler 方法作了一个细微的调整，即 handler 的参数变成了 Context
+```go
+
+``` 
+### 框架入口
+## main.go
 ```go
 
 ``` 
