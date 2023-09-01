@@ -250,12 +250,84 @@ func (c *Context) HTML(code int, html string) {
 ``` 
 提供了快速构造 String/Data/JSON/HTML 响应的方法
 ### 路由(Router)
-将和路由相关的方法和结构提取出来，放到一个新的文件`router.go`中，方便下一次对 router 的功能进行增强，例如提供动态路由的支持。 router 的 handler 方法作了一个细微的调整，即 handler 的参数变成了 Context
+一开始，路由是写在`gee.go`里面的，现在将和路由相关的方法和结构提取出来，放到一个新的文件`router.go`中，方便下一次对 router 的功能进行增强，例如提供动态路由的支持。 
+```go
+func (r *router) handle(c *Context) {
+	key := c.Method + "-" + c.Path
+	if handler, ok := r.handlers[key]; ok {
+		handler(c)
+	} else {
+		c.String(http.StatusNotFound, "404 NOT FOUND: %s\n", c.Path)
+	}
+}
+``` 
+router 的 handler 方法作了一个细微的调整，即 handler 的参数变成了 Context
+### 框架入口
+#### gee.go
+将`router`相关的代码独立后，`gee.go`简单了不少。最重要的还是实现了 ServeHTTP 接口，接管了所有的 HTTP 请求。
+```go
+func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	c := newContext(w, req)
+	engine.router.handle(c)
+}
+``` 
+相比之前的代码，这个方法也有细微的调整，在调用 `router.handle` 之前，构造了一个 Context 对象。这个对象目前还非常简单，仅仅是包装了原来的两个参数。
+#### main.go
+```go
+func main() {
+	r := gee.New()
+	r.GET("/", func(c *gee.Context) {
+		c.HTML(http.StatusOK, "<h1>Hello Gee</h1>")		// HTML函数
+	})
+	r.GET("/hello", func(c *gee.Context) {
+		// expect /hello?name=geektutu
+		c.String(http.StatusOK, "hello %s, you're at %s\n", c.Query("name"), c.Path)	// String函数
+	})
+
+	r.POST("/login", func(c *gee.Context) {
+		c.JSON(http.StatusOK, gee.H{				// JSON函数
+			"username": c.PostForm("username"),
+			"password": c.PostForm("password"),
+		})
+	})
+
+	r.Run(":9999")
+}
+``` 
+把`Handler`的参数变成成了`gee.Context`，提供了查询Query/PostForm参数的功能。
+`gee.Context`封装了`HTML/String/JSON`函数，能够快速构造HTTP响应。
+#### test
+运行`main.go`，在`cmd`中使用`curl`查看成果：
+```go
+> curl -i http://localhost:9999/
+HTTP/1.1 200 OK
+Date: Mon, 12 Aug 2019 16:52:52 GMT
+Content-Length: 18
+Content-Type: text/html; charset=utf-8
+<h1>Hello Gee</h1>
+
+> curl "http://localhost:9999/hello?name=geektutu"
+hello geektutu, you're at /hello
+
+> curl "http://localhost:9999/login" -X POST -d "username=geektutu&password=1234"
+{"password":"1234","username":"geektutu"}
+
+> curl "http://localhost:9999/xxx"
+404 NOT FOUND: /xxx
+```
+# 前缀树路由
+使用 Trie 树实现动态路由(dynamic route)解析
+支持两种模式`:name`和`*filepath`
 ```go
 
 ``` 
-### 框架入口
-## main.go
+```go
+
+``` 
+```go
+
+``` 
+
 ```go
 
 ``` 
