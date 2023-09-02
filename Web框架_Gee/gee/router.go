@@ -2,10 +2,7 @@ package gee
 
 import (
 	"net/http"
-	"runtime/metrics"
 	"strings"
-
-	"honnef.co/go/tools/pattern"
 )
 
 type router struct {
@@ -18,7 +15,7 @@ type router struct {
 
 func newRouter() *router {
 	return &router{
-		roots: make(map[string]*node),
+		roots:    make(map[string]*node),
 		handlers: make(map[string]HandlerFunc),
 	}
 }
@@ -41,7 +38,7 @@ func parsePattern(pattern string) []string {
 
 func (r *router) addRoute(method string, pattern string, handler HandlerFunc) {
 	parts := parsePattern(pattern)
-	
+
 	key := method + "-" + pattern
 	_, ok := r.roots[method]
 	if !ok {
@@ -69,7 +66,7 @@ func (r *router) getRoute(method string, path string) (*node, map[string]string)
 				params[part[1:]] = searchParts[index]
 			}
 			if part[0] == '*' && len(part) > 1 {
-				params[part[1:]] = strings.Join(searchParts([index], "/"))
+				params[part[1:]] = strings.Join(searchParts[index:], "/")
 				break
 			}
 		}
@@ -79,9 +76,11 @@ func (r *router) getRoute(method string, path string) (*node, map[string]string)
 }
 
 func (r *router) handle(c *Context) {
-	key := c.Method + "-" + c.Path
-	if handler, ok := r.handlers[key]; ok {
-		handler(c)
+	n, params := r.getRoute(c.method, c.Path)
+	if n != nil {
+		c.Params = params
+		key := c.Method + "-" + n.pattern
+		r.handlers[key](c)
 	} else {
 		c.String(http.StatusNotFound, "404 NOT FOUND: %s\n", c.Path)
 	}

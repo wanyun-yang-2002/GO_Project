@@ -476,13 +476,39 @@ func (r *router) getRoute(method string, path string) (*node, map[string]string)
 }
 ``` 
 ## Context 与 handle 的变化
-在 HandlerFunc 中，希望能够访问到解析的参数，因此，需要对 Context 对象增加一个属性和方法，来提供对路由参数的访问。我们将解析后的参数存储到Params中，通过c.Param("lang")的方式获取到对应的值。
+在 `HandlerFunc` 中，希望能够访问到解析的参数，因此，需要对 `Context` 对象增加一个属性和方法，来提供对路由参数的访问。我们将解析后的参数存储到`Params`中，通过`c.Param("lang")`的方式获取到对应的值。
 ```go
+type Context struct {
+	// origin objects
+	Writer http.ResponseWriter
+	Req    *http.Request
+	// request info
+	Path   string
+	Method string
+	Params map[string]string	// 新增的属性，map属性
+	// response info
+	StatusCode int
+}
 
+func (c *Context) Param(key string) string {	// 新增的方法
+	value, _ := c.Params[key]	// 通过 c.Params[key]，用 value 获取解析后的参数对应的值
+	return value
+}
 ``` 
+`router.go`的变化比较小，比较重要的一点是，在调用匹配到的`handler`前，将解析出来的路由参数赋值给了`c.Params`。这样就能够在`handler`中，通过`Context`对象访问到具体的值了。
 ```go
-
+func (r *router) handle(c *Context) {
+	n, params := r.getRoute(c.method, c.Path)
+	if n != nil {
+		c.Params = params		// 将解析出来的路由参数赋值给了 c.Params
+		key := c.Method + "-" + n.pattern
+		r.handlers[key](c)		// 调用匹配到的 handler
+	} else {
+		c.String(http.StatusNotFound, "404 NOT FOUND: %s\n", c.Path)
+	}
+}
 ``` 
+## 单元测试
 ```go
 
 ``` 
