@@ -318,16 +318,171 @@ hello geektutu, you're at /hello
 # 前缀树路由
 使用 Trie 树实现动态路由(dynamic route)解析
 支持两种模式`:name`和`*filepath`
+## Trie 树简介
+之前的代码中使用了`map`结构存储路由表键值对，这样的索引很高效，但它只能索引静态路由，无法索引动态路由。
+**动态路由：** 一条路由规则可以匹配某一类型，而非某一条固定的路由。例如`/hello/name`可以匹配到`/hello/geektutu`、`/hello/jack`等。
+动态路由有很多种实现方式，支持的规则、性能等有很大的差异。
+**前缀树（Trie 树）** 实现动态路由最常用的数据结构。每一个节点的所有的子节点都拥有相同的前缀。这种结构非常适用于路由匹配。
+```mermaid
+graph TD
+subgraph 前缀树举例
+	A(/) --> B(/:lang)
+	A(/) --> C(/about)
+	A(/) --> D(/p)
+	B --> E(/intro)
+	B --> F(/tutorial)
+	B --> G(/doc)
+	D --> H(/blog)
+	D --> I(/related)
+end
+```
+HTTP请求的路径是由`/`分隔的多端构成的，因此，每一段可以作为前缀树的一个节点。
+通过树结构进行查询，如果中间某一层的节点都不满足条件，说明没有匹配到的路由，查询结束。
+
+接下来实现的动态路由具备以下两个功能。
+1. 参数匹配`:`。例如 `/p/:lang/doc`，可以匹配 `/p/c/doc` 和 `/p/go/doc`。
+2. 通配`*`。例如 `/static/*filepath`，可以匹配`/static/fav.ico`，也可以匹配`/static/js/jQuery.js`，这种模式常用于静态服务器，能够递归地匹配子路径。
+
+## Trie 树实现
+首先要清楚树节点上应该储存哪些信息。
+```go
+type node struct {
+	pattern  string  // 待匹配的路由，如 /p/:lang
+	part     string  // 路由中的一部分，如 :lang
+	children []*node // 子节点，例如 [doc, tutorial, intro]
+	isWild   bool    // 是否精确匹配，part 含有冒号(:)或星号(*)时为 true
+}
+```
+为了实现动态路由匹配，加上了`isWild`这个参数。
+`isWild`用法举例：想匹配 `/p/go/doc/`这个路由时，第一层节点中，`p`精准匹配到`p`，第二层节点中，`:lang`模糊匹配到`go`，则会把`lang`这个参数赋值为`go`，继续下一层匹配。 
+```go
+// 第一个匹配成功的节点，用于插入
+func (n *node) matchChild(part string) *node {
+	for _, child := range n.children {
+		if child.part == part || child.isWild {
+			return child
+		}
+	}
+	return nil
+}
+
+// 所有匹配成功的节点，用于查找
+func (n *node) matchChildren(part string) []*node {
+	nodes := make([]*node, 0)
+	for _, child := range n.children {
+		if child.part == part || child.isWild {
+			nodes = append(nodes, child)
+		}
+	}
+	return nodes
+}
+``` 
+将匹配的逻辑包装成一个辅助函数 ↑
+\- - - 
+
+对于路由来说，最重要的是注册与匹配。
+- 开发服务时，注册路由规则，映射 handler；
+- 访问服务时，匹配路由规则，查找对应的 handler。
+
+因此，Tire 树要支持节点的插入和查询。
+
+```go
+// 插入功能
+func (n *node) insert(pattern string, parts []string, height int) {
+	if len(parts) == height {
+		n.pattern = pattern
+		return
+	}
+
+	part := parts[height]
+	child := n.matchChild(part)
+
+	// 如果没有匹配到当前 part 的节点，则新建一个
+	if child == nil {
+		child = &node{part: part, isWild: part[0] == ':' || part[0] == '*'}
+		n.children = append(n.children, child)
+	}
+	child.insert(pattern, parts, height+1) // 递归
+}
+
+// 查询功能
+func (n *node) search(parts []string, height int) *node {
+	// 退出规则
+	// 匹配到*或第len(parts)层节点
+	if len(parts) == height || strings.HasPrefix(n.part, "*") {
+		if n.pattern == "" { // 匹配失败
+			return nil
+		}
+		return n
+	}
+
+	part := parts[height]
+	children := n.matchChildren(part)
+
+	for _, child := range children {
+		result := child.search(parts, height+1)
+		if result != nil {
+			return result
+		}
+	}
+	return nil
+}
+``` 
+插入功能：递归查找每一层的节点，如果没有匹配到当前`part`的节点，则新建一个。
+- 有一点需要注意，`/p/:lang/doc`只有在第三层节点，即`doc`节点，`pattern`才会设置为`/p/:lang/doc`。`p`和`:lang`节点的`pattern`属性皆为空。
+- 因此，当匹配结束时，我们可以使用`n.pattern == ""`来判断路由规则是否匹配成功。例如，`/p/python`虽能成功匹配到`:lang`，但`:lang`的`pattern`值为空，因此匹配失败。
+
+查询功能：递归查询每一层的节点
+退出规则：匹配到`*`或第`len(parts)`层节点；匹配失败。
+## Router - 将 Trie 树应用到路由中
+使用 `roots` 存储每种请求方式的 Trie 树根节点。
+使用 `handlers` 存储每种请求方式的 `HandlerFunc` 。
+```go
+type router struct {
+	roots    map[string]*node
+	handlers map[string]HandlerFunc
+}
+``` 
+`getRoute` 函数中，解析`:`和`*`两种匹配符的参数，返回一个 `map` 。
+举例：
+- `/p/go/doc`匹配到`/p/:lang/doc`，解析结果为`{lang: "go"}`
+- `/static/css/geektutu.css`匹配到`/static/*filepath`，解析结果为`{filepath: "css/geektutu.css"}`。
+```go
+func (r *router) getRoute(method string, path string) (*node, map[string]string) {
+	searchParts := parsePattern(path)
+	params := make(map[string]string)	// 解析 : 和 * 两种匹配符的参数，将解析后的参数保存在 params 这个 map 中，并在最后返回
+	root, ok := r.roots[method]
+
+	if !ok {
+		return nil, nil
+	}
+
+	n := root.search(searchParts, 0)
+
+	if n != nil {
+		parts := parsePattern(n.pattern)
+		for index, part := range parts {
+			if part[0] == ':' {
+				params[part[1:]] = searchParts[index]
+			}
+			if part[0] == '*' && len(part) > 1 {
+				params[part[1:]] = strings.Join(searchParts([index], "/"))
+				break
+			}
+		}
+		return n, params
+	}
+	return nil, nil
+}
+``` 
+## Context 与 handle 的变化
+在 HandlerFunc 中，希望能够访问到解析的参数，因此，需要对 Context 对象增加一个属性和方法，来提供对路由参数的访问。我们将解析后的参数存储到Params中，通过c.Param("lang")的方式获取到对应的值。
 ```go
 
 ``` 
 ```go
 
 ``` 
-```go
-
-``` 
-
 ```go
 
 ``` 
