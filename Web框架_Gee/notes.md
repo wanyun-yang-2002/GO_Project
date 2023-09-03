@@ -512,7 +512,7 @@ func (r *router) handle(c *Context) {
 新建`/gee/router_test.go`，对当前的 `gee` 框架进行单元测试
 单元测试（unit testing）：是指对软件中的最小可测试单元进行检查和验证。至于“单元”的大小或范围，并没有一个明确的标准，“单元”可以是一个函数、方法、类、功能模块或者子系统。
 ## 使用Demo
-修改并运行`main.go`，使用`curl`工具测试结果。
+修改并运行`main.go`
 ```go
 // 新增两个函数
 r.GET("/hello/:name", func(c *gee.Context) {
@@ -524,9 +524,36 @@ r.GET("/assets/*filepath", func(c *gee.Context) {
 	c.JSON(http.StatusOK, gee.H{"filepath": c.Param("filepath")})
 })
 ``` 
+运行`main.go`时发现一点小问题，看了源码才知道`trie.go`中少了两个方法，记得补充上：
 ```go
+func (n *node) travel(list *([]*node)) {
+	if n.pattern != "" {
+		*list = append(*list, n)
+	}
+	for _, child := range n.children {
+		child.travel(list)
+	}
+}
 
+func (n *node) String() string {
+	return fmt.Sprintf("node{pattern=%s, part=%s, isWild=%t}", n.pattern, n.part, n.isWild)
+}
 ``` 
+`curl`工具测试结果:
+```go
+$ curl "http://localhost:9999/hello/geektutu"
+hello geektutu, you're at /hello/geektutu
+
+$ curl "http://localhost:9999/assets/css/geektutu.css"
+{"filepath":"css/geektutu.css"}
+``` 
+
+## 小结
+Trie 树这一部分就稍微有些复杂了，可能因为我是学了`go`基本语法之后就直接开始跟着做`gee`的原因，看的有些吃力。
+通过画图理解了 Trie 树的原理，具体代码能看懂，但自己徒手写肯定写不出来。
+没关系，慢慢学。
+接下来不急着做`gee`了，准备看看 go web 的书，再看一看同作者写的`gin`教程，跟着学一学补一补基础。
+# 分组控制
 ```go
 
 ``` 
