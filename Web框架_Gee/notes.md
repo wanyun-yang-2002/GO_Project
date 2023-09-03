@@ -511,8 +511,18 @@ func (r *router) handle(c *Context) {
 ## 单元测试
 新建`/gee/router_test.go`，对当前的 `gee` 框架进行单元测试
 单元测试（unit testing）：是指对软件中的最小可测试单元进行检查和验证。至于“单元”的大小或范围，并没有一个明确的标准，“单元”可以是一个函数、方法、类、功能模块或者子系统。
+## 使用Demo
+修改并运行`main.go`，使用`curl`工具测试结果。
 ```go
+// 新增两个函数
+r.GET("/hello/:name", func(c *gee.Context) {
+		// expect /hello/geektutu
+		c.String(http.StatusOK, "hello %s, you're at %s\n", c.Param("name"), c.Path)
+	})
 
+r.GET("/assets/*filepath", func(c *gee.Context) {
+	c.JSON(http.StatusOK, gee.H{"filepath": c.Param("filepath")})
+})
 ``` 
 ```go
 

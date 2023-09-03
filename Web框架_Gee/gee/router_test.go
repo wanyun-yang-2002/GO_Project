@@ -1,3 +1,5 @@
+package gee
+
 func newTestRouter() *router {
 	r := newRouter()
 	r.addRoute("GET", "/", nil)
@@ -8,6 +10,7 @@ func newTestRouter() *router {
 	return r
 }
 
+// 测试是否能查询成功
 func TestParsePattern(t *testing.T) {
 	ok := reflect.DeepEqual(parsePattern("/p/:name"), []string{"p", ":name"})
 	ok = ok && reflect.DeepEqual(parsePattern("/p/*"), []string{"p", "*"})
@@ -17,6 +20,7 @@ func TestParsePattern(t *testing.T) {
 	}
 }
 
+// 测试能否匹配到路由
 func TestGetRoute(t *testing.T) {
 	r := newTestRouter()
 	n, ps := r.getRoute("GET", "/hello/geektutu")
