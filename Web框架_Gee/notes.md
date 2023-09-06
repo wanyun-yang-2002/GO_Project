@@ -559,7 +559,7 @@ Trie 树这一部分就稍微有些复杂了，可能因为我是学了`go`基�
 分组控制(Group Control)是 Web 框架应提供的基础功能之一。
 分组是指路由的分组，如果没有路由分组，就需要针对每一个路由进行控制。但是真实的业务场景中，往往某一组路由需要相似的处理。
 例如：
-- 以`/post`开头的路由匿名可访问。
+- 以`/post`开头的路可匿名访问。
 - 以`/admin`开头的路由需要鉴权。
 - 以`/api`开头的路由是 RESTful 接口，可以对接第三方平台，需要三方平台鉴权。
 - 
@@ -693,6 +693,23 @@ hello geektutu, you're at /v1/hello
 
 $ curl "http://localhost:9999/v2/hello/geektutu"
 hello geektutu, you're at /hello/geektutu
+``` 
+还算好理解，通过对路由分组，可以对某一组路由进行同样的处理，而不用单独处理每个路由。
+用前缀来区分不同组的路由，通过中间件提供扩展能力，使分组控制的收益更显著。
+在`RouterGroup`中设置指针，通过让指针指向`Engine`，使所有`group`实例能够间接通过`Engine`访问各种接口。
+通过`go`的嵌套类型，使`Engine`能够拥有`RouterGroup`的属性，这样便于使用不同方法添加路由（可以单独添加，可以分组添加）
+
+# 中间件 middleware 
+设计并实现 Web 框架的中间件(Middlewares)机制。
+实现通用的`Logger`中间件，能够记录请求到响应所花费的时间
+```go
+
+``` 
+```go
+
+``` 
+```go
+
 ``` 
 ```go
 
