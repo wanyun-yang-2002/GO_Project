@@ -727,7 +727,49 @@ func Logger() HandlerFunc {
 	}
 }
 ``` 
+另外，支持设置多个中间件，依次进行调用。
+
+中间件是应用在`RouterGroup`上的，应用在最顶层的 `Group`，相当于作用于全局，所有的请求都会被中间件处理。
+如果只作用在某条路由规则，那还不如用户直接在 `Handler` 中调用直观。只作用在某条路由规则的功能通用性太差，不适合定义为中间件。
+
+接收到请求后，应查找所有应作用于该路由的中间件，保存在`Context`中，依次进行调用。
+中间件不仅作用在处理流程前，也可以作用在处理流程后，即在用户定义的 `Handler` 处理完毕后，还可以执行剩下的操作。所以依次调用后，还需要在`Context`中保存一下。
+
+为此，需要给`Context`添加了2个参数，定义`Next`方法
+其中，参数`index`是记录当前执行到第几个中间件，当在中间件中调用`Next`方法时，控制权交给了下一个中间件，直到调用到最后一个中间件，然后再从后往前，调用每个中间件在`Next`方法之后定义的部分。
 ```go
+type Context struct {
+	// origin objects
+	Writer http.ResponseWriter
+	Req    *http.Request
+	// request info
+	Path   string
+	Method string
+	Params map[string]string
+	// response info
+	StatusCode int
+	// 新增内容 middleware
+	handlers []HandlerFunc
+	index    int // 记录当前执行到第几个中间件
+}
+
+func newContext(w http.ResponseWriter, req *http.Request) *Context {
+	return &Context{
+		Writer: w,
+		Req:    req,
+		Path:   req.URL.Path,
+		Method: req.Method,
+		index:  -1,		// 新增内容
+	}
+}
+// 新增Next方法
+func (c *Context) Next() {
+	c.index++
+	s := len(c.handlers)
+	for ; c.index < s; c.index++ {
+		c.handlers[c.index](c)
+	}
+}
 
 ``` 
 ```go
