@@ -702,8 +702,30 @@ hello geektutu, you're at /hello/geektutu
 # 中间件 middleware 
 设计并实现 Web 框架的中间件(Middlewares)机制。
 实现通用的`Logger`中间件，能够记录请求到响应所花费的时间
-```go
+## 中间件是什么
+中间件(middlewares)，简单说，就是非业务的技术类组件。
+Web 框架本身不可能去理解所有的业务，因而不可能实现所有的功能。
+因此，框架需要有一个插口，允许用户自己定义功能，嵌入到框架中，仿佛这个功能是框架原生支持的一样。
 
+对中间件而言，需要考虑2个比较关键的点：
+1. 插入点在哪？使用框架的人并不关心底层逻辑的具体实现，如果插入点太底层，中间件逻辑就会非常复杂。如果插入点离用户太近，那和用户直接定义一组函数，每次在 Handler 中手工调用没有多大的优势了。
+2. 中间件的输入是什么？中间件的输入，决定了扩展能力。暴露的参数太少，用户发挥空间有限。
+## 中间件设计
+`Gee` 的中间件的定义与路由映射的 `Handler` 一致，**处理的输入**是`Context`对象。
+**插入点**在框架接收到请求初始化`Context`对象后。在这里允许用户使用自己定义的中间件做一些额外的处理，例如记录日志，以及对`Context`进行二次加工等。
+通过调用`(*Context).Next()`函数，中间件可等待用户自己定义的 `Handler`处理结束后，再做一些额外的操作，例如计算本次处理所用时间等。
+也就是说，`Gee` 的中间件支持用户在请求被处理的前后，做一些额外的操作。举个例子，我们希望最终能够支持如下定义的中间件，`c.Next()`表示等待执行其他的中间件或用户的`Handler`
+```go
+func Logger() HandlerFunc {
+	return func(c *Context) {
+		// start timer
+		t := time.Now()
+		// process request
+		c.Next()
+		// calculate resolution time
+		log.Panicf("[%d] %s in %v", c.StatusCode, c.Req.RequestURL, time.Since((t)))
+	}
+}
 ``` 
 ```go
 
