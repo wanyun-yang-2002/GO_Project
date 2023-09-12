@@ -786,7 +786,7 @@ func B(c *Context) {
 }
 ``` 
 
-`c.handlers`是这样的`[A, B, Handler]`，`c.index`初始化为`-1`。
+`c.handlers`是这样的:`[A, B, Handler]`，`c.index`初始化为`-1`。
 调用`c.Next()`，接下来的流程是这样的：
 - `c.index++`，`c.index` 变为 `0`
 - `0 < 3`，调用 `c.handlers[0]`，即 `A`
