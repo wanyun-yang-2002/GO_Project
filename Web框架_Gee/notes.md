@@ -770,11 +770,38 @@ func (c *Context) Next() {
 		c.handlers[c.index](c)
 	}
 }
-
 ``` 
+如果将用户在映射路由时定义的`Handler`添加到`c.handlers`列表中，结果会如何？
+假设应用了中间件 A 和 B ，和路由映射的 Handler 。
 ```go
-
+func A(c *Context) {
+    part1
+    c.Next()
+    part2
+}
+func B(c *Context) {
+    part3
+    c.Next()
+    part4
+}
 ``` 
+
+`c.handlers`是这样的`[A, B, Handler]`，`c.index`初始化为`-1`。
+调用`c.Next()`，接下来的流程是这样的：
+- `c.index++`，`c.index` 变为 `0`
+- `0 < 3`，调用 `c.handlers[0]`，即 `A`
+- 执行 `part1`，调用 `c.Next()`
+- `c.index++`，`c.index` 变为 `1`
+- `1 < 3`，调用 `c.handlers[1]`，即 `B`
+- 执行 `part3`，调用 `c.Next()`
+- `c.index++`，`c.index` 变为 `2`
+- `2 < 3`，调用 `c.handlers[2]`，即`Handler`
+- `Handler` 调用完毕，返回到 `B` 中的 `part4`，执行 `part4`
+- `part4` 执行完毕，返回到 `A` 中的 `part2`，执行 `part2`
+- `part2` 执行完毕，结束。
+
+一句话说清楚重点，最终的顺序是`part1 -> part3 -> Handler -> part 4 -> part2`。恰恰满足了对中间件的要求，接下来看调用部分的代码，就能全部串起来了。
+
 ```go
 
 ``` 
