@@ -802,7 +802,16 @@ func B(c *Context) {
 
 一句话说清楚重点，最终的顺序是`part1 -> part3 -> Handler -> part 4 -> part2`。恰恰满足了对中间件的要求，接下来看调用部分的代码，就能全部串起来了。
 
+## 代码实现
+定义`Use`函数，将中间件应用到某个`Group`
 ```go
+// 新增部分
+// Use is defined to add middleware to the group
+func (group *RouterGroup) Use(middlewares ...HandlerFunc) {
+	group.middlewares = append(group.middlewares, middlewares...)
+}
+
+// 修改部分
 
 ``` 
 ```go
