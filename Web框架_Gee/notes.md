@@ -803,15 +803,116 @@ func B(c *Context) {
 一句话说清楚重点，最终的顺序是`part1 -> part3 -> Handler -> part 4 -> part2`。恰恰满足了对中间件的要求，接下来看调用部分的代码，就能全部串起来了。
 
 ## 代码实现
-定义`Use`函数，将中间件应用到某个`Group`
+定义`Use`函数，用于将中间件应用到某个`Group`
 ```go
-// 新增部分
+// 新增部分，定义 Use 函数
 // Use is defined to add middleware to the group
+//  省略号(…)操作用于可变参数函数，数组长度推断，取分片元素值，以及go命令
 func (group *RouterGroup) Use(middlewares ...HandlerFunc) {
 	group.middlewares = append(group.middlewares, middlewares...)
 }
-
+```
+接收到一个具体请求时，要判断该请求适用于哪些中间件。
+在这里通过 `URL` 的前缀来判断。得到中间件列表后，赋值给 `c.handlers` 。
+```go
 // 修改部分
+func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	var middlewares []HandlerFunc
+	for _, group := range engine.groups {
+		if strings.HasPrefix(req.URL.Path, group.prefix) {		// 通过 URL 的前缀来判断该请求适用于哪些中间件
+			middlewares = append(middlewares, group.middlewares...)
+		}
+	}
+	c := newContext(w, req)
+	c.handlers = middlewares	// 得到中间件列表后，赋值给 c.handlers 
+	engine.router.handle(c)
+}
+``` 
+对`router.go`中的`handle`进行修改
+将从路由匹配到的`Handler`添加到`c.handlers`列表中，执行`c.Next()`
+```go
+// 修改部分
+func (r *router) handle(c *Context) {
+	n, params := r.getRoute(c.Method, c.Path)
+
+	if n != nil {
+		key := c.Method + "-" + n.pattern
+		c.Params = params
+		c.handlers = append(c.handlers, r.handlers[key])	// 将从路由匹配得到的 Handler 添加到 c.handlers列表中
+	} else {
+		c.handlers = append(c.handlers, func(c *Context) {
+			c.String(http.StatusNotFound, "404 NOT FOUND: %s\n", c.Path)
+		})
+	}
+	c.Next()	// 执行c.Next()
+}
+``` 
+## 使用Demo
+打开`main.go`，添加`onlyForV2()`函数
+```go
+func onlyForV2() gee.HandlerFunc {
+	return func(c *gee.Context) {
+		// start timer
+		t := time.Now()
+		// if a server error occured
+		c.Fail(500, "Internal Server Error")
+		// Calculate resolution time
+		log.Printf("[%d] %s in %v for group %v2", c.StatusCode, c.Req.RequestURI, time.Since(t))
+	}
+}
+``` 
+修改主函数
+```go
+func main() {
+	r := gee.New()
+	r.Use(gee.Logger()) // global middleware 中间件是 gee.Logger() 框架默认提供的中间件，应用在全局，所有的路由都会应用该中间件
+	r.GET("/", func(c *gee.Context) {
+		c.HTML(http.StatusOK, "<h1>Index Page</h1>")
+	})
+
+	v2 := r.Group("/v2")
+	v2.Use(onlyForV2()) // v2 group middleware	用来测试功能的中间件，仅在 v2 对应的 Group 中应用
+	{
+		v2.GET("/hello/:name", func(c *gee.Context) {
+			// expect /hello/geektutu
+			c.String(http.StatusOK, "hello %s, you're at %s\n", c.Param("name"), c.Path)
+		})
+	}
+
+	r.Run(":9999")
+}
+``` 
+使用 curl 测试，可以看到两个中间件都生效了
+```go
+$ curl http://localhost:9999/
+>>> log
+2019/08/17 01:37:38 [200] / in 3.14µs
+
+(2) global + group middleware
+$ curl http://localhost:9999/v2/hello/geektutu
+>>> log
+2019/08/17 01:38:48 [200] /v2/hello/geektutu in 61.467µs for group v2
+2019/08/17 01:38:48 [200] /v2/hello/geektutu in 281µs
+``` 
+```go
+
+``` 
+```go
+
+``` 
+```go
+
+``` 
+```go
+
+``` 
+```go
+
+``` 
+```go
+
+``` 
+```go
 
 ``` 
 ```go
