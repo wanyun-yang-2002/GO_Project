@@ -1016,10 +1016,20 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 ``` 
 ## 使用 Demo
-
-```go
-
+最终的目录结构：
+```txt
+---gee/
+---static/
+   |---css/
+        |---geektutu.css
+   |---file1.txt
+---templates/
+   |---arr.tmpl
+   |---css.tmpl
+   |---custom_func.tmpl
+---main.go
 ``` 
+根据目录结构创建应有的文件夹及文件
 ```go
 
 ``` 
