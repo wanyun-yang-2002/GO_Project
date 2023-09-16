@@ -921,22 +921,102 @@ JavaScript、CSS 和 HTML 是网页中必不可少的。要做到服务端渲染
 找到文件后如何返回这一步，`net/http`库已经实现了。
 `gee` 框架要做的，仅仅是解析请求的地址，再映射到服务器上文件的真实地址，交给`http.FileServer`处理就好了。
 
-打开`gee.go`新增以下代码：
+打开`gee.go`，给`RouterGroup`添加两个方法，一个是`createStaticHandler`，一个是`Static`
 ```go
+// Create static handler
+func (group *RouterGroup) createStaticHandler(relativePath string, fs http.FileSystem) HandlerFunc {
+	absolutePath := path.Join(group.prefix, relativePath)	// 绝对地址（真实地址） = 前缀 + 相对地址
+	fileServer := http.StripPrefix(absolutePath, http.FileServer(fs))
+	return func(c *Context) {
+		file := c.Param("filepath")
+		// Check if file exists and/or if we have permission to access it
+		if _, err := fs.Open(file); err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		fileServer.ServeHTTP(c.Writer, c.Req)
+	}
+}
 
+// serve static files
+func (group *RouterGroup) Static(relativePath string, root string) {
+	handler := group.createStaticHandler(relativePath, http.Dir(root))
+	urlPattern := path.Join(relativePath, "/*filepath")
+	// register GET handlers
+	group.GET(urlPattern, handler)
+}
 ``` 
+`Static`这个方法是暴露给客户的，用户可以将磁盘上的某个文件夹`root`映射到路由`relativePath`。例如：
+用户访问`localhost:9999/assets/js/geektutu.js`，最终返回`/usr/geektutu/blog/static/js/geektutu.js`。
 ```go
-
+r := gee.New()
+r.Static("/assets", "/usr/geektutu/blog/static")
+// 或相对路径 r.Static("/assets", "./static")
+r.Run(":9999")
 ``` 
+## HTML 模板渲染
+`Go` 语言内置了`text/template`和`html/template`2个模板标准库。其中`html/template`为 `HTML` 提供了较为完整的支持，包括普通变量渲染、列表渲染、对象渲染等。
+`gee` 框架的模板渲染直接使用`html/template`提供的能力。
 ```go
-
+// gee.go
+Engine struct {
+		*RouterGroup
+		router        *router
+		groups        []*RouterGroup     // store all groups
+		// 新增
+		// 为 Engine 示例添加 *template.Template 和 template.FuncMap对象
+		// 前者将所有的模板加载进内存，后者是所有的自定义模板渲染函数
+		htmlTemplates *template.Template // for html render
+		funcMap       template.FuncMap   // for html render
+	}
+// 新增
+// 设置自定义渲染
+func (engine *Engine) SetFuncMap(funcMap template.FuncMap) {
+	engine.funcMap = funcMap
+}
+// 加载模板的方法
+func (engine *Engine) LoadHTMLGlob(pattern string) {
+	engine.htmlTemplates = template.Must(template.New("").Funcs(engine.funcMap).ParseGlob(pattern))
+}
 ``` 
+对原来的 `(*Context).HTML()`方法做了些小修改，使之支持根据模板文件名选择模板进行渲染。
 ```go
+// context.go
+// 在 Context 中添加了成员变量 engine *Engine
+type Context struct {
+    // ...
+	// engine pointer
+	engine *Engine
+}
 
+// 这样就能够通过 Context 访问 Engine 中的 HTML 模板
+func (c *Context) HTML(code int, name string, data interface{}) {
+	c.SetHeader("Content-Type", "text/html")
+	c.Status(code)
+	if err := c.engine.htmlTemplates.ExecuteTemplate(c.Writer, name, data); err != nil {
+		c.Fail(500, err.Error())
+	}
+}
 ``` 
+实例化 `Context` 时，还需要给 `c.engine` 赋值
 ```go
+// gee.go
 
+func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	var middlewares []HandlerFunc
+	for _, group := range engine.groups {
+		if strings.HasPrefix(req.URL.Path, group.prefix) {
+			middlewares = append(middlewares, group.middlewares...)
+		}
+	}
+	c := newContext(w, req)
+	c.handlers = middlewares
+	c.engine = engine	// 新增部分，给 c.engine 赋值
+	engine.router.handle(c)
+}
 ``` 
+## 使用 Demo
+
 ```go
 
 ``` 
