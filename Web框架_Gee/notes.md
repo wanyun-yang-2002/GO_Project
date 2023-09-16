@@ -894,6 +894,34 @@ $ curl http://localhost:9999/v2/hello/geektutu
 2019/08/17 01:38:48 [200] /v2/hello/geektutu in 61.467µs for group v2
 2019/08/17 01:38:48 [200] /v2/hello/geektutu in 281µs
 ``` 
+# 模板 HTML Template
+实现静态资源服务(Static Resource)。
+支持HTML模板渲染。
+## 服务端渲染
+传统的动态页面（JSP）由于低效率而渐渐被前后端分离模式所取代。
+前后端分离的开发模式，即 Web 后端提供 RESTful 接口，返回结构化的数据(通常为 JSON 或者 XML)。前端使用 AJAX 技术请求到所需的数据，利用 JavaScript 进行渲染。
+- 优点
+  - 这种开发模式前后端解耦，后端专心解决资源利用，并发，数据库等问题，只需要考虑数据如何生成；前端专注于界面设计实现，只需要考虑拿到数据后如何渲染即可
+  - 因为后端只关注于数据，接口返回值是结构化的，与前端解耦。同一套后端服务能够同时支撑小程序、移动APP、PC端 Web 页面，以及对外提供的接口。
+- 缺点
+  - 前后分离的一大问题在于，页面是在客户端渲染的，比如浏览器，这对于爬虫并不友好。Google 爬虫已经能够爬取渲染后的网页，但是短期内爬取服务端直接渲染的 HTML 页面仍是主流。
+
+一些知识：
+- 前后端分离的开发模式中，客户端和服务端需要接口进行通信，RESTful 是一种目前最流行的接口设计规范
+  - REST（英文：Representational State Transfer，简称REST，直译过来表现层状态转换）并没有一个明确的标准，而更像是一种设计风格。RESTful API 就是满足REST架构风格的接口。
+  - 它的主要特征：以资源为基础，统一接口，URI 指向资源，无状态
+  - URI（Universal Resource Identifier 统一资源标志符）包括URL和URN，在这里更多时候可能代指URL(统一资源定位符)
+- AJAX即“Asynchronous JavaScript and XML”，指的是一套综合了多项技术的浏览器端网页开发技术。
+## 静态文件 Serve Static Files
+JavaScript、CSS 和 HTML 是网页中必不可少的。要做到服务端渲染，第一步便是要支持 JS、CSS 等静态文件。
+之前设计动态路由的时候，支持通配符`*`匹配多级子路径。比如路由规则`/assets/*filepath`，可以匹配`/assets/`开头的所有的地址。例如`/assets/js/geektutu.js`，匹配后，参数`filepath`就赋值为`js/geektutu.js`。
+
+如果将所有的静态文件放在`/usr/web`目录下，那么`filepath`的值即是该目录下文件的相对地址。映射到真实的文件后，将文件返回，静态服务器就实现了。
+
+找到文件后如何返回这一步，`net/http`库已经实现了。
+`gee` 框架要做的，仅仅是解析请求的地址，再映射到服务器上文件的真实地址，交给`http.FileServer`处理就好了。
+
+打开`gee.go`新增以下代码：
 ```go
 
 ``` 
