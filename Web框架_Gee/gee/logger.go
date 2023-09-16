@@ -12,6 +12,6 @@ func Logger() HandlerFunc {
 		// process request
 		c.Next()
 		// calculate resolution time
-		log.Panicf("[%d] %s in %v", c.StatusCode, c.Req.RequestURL, time.Since((t)))
+		log.Panicf("[%d] %s in %v", c.StatusCode, c.Req.RequestURI, time.Since((t)))
 	}
 }
